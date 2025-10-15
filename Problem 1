@@ -1,0 +1,88 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, log_loss
+from sklearn.linear_model import SGDClassifier
+import pandas as pd 
+
+#Load data from diabetes.csv and make it binary (above-median => positive)
+try:
+    df_diabetes = pd.read_csv('/content/diabetes.csv')
+
+    X = df_diabetes.iloc[:, :-1].values
+    y_cont = df_diabetes.iloc[:, -1].values
+    y = (y_cont > np.median(y_cont)).astype(int)
+    print("data loaded successfully")
+except FileNotFoundError:
+    print("Error: not found in folder.")
+except Exception as e:
+    print(f"error{e}")
+
+
+# Train/test split (80/20)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=0, stratify=y
+)
+
+# Standardize
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test  = scaler.transform(X_test)
+
+# Logistic regression via SGD so we can track loss across iterations
+clf = SGDClassifier(loss="log_loss", random_state=0)
+
+# Initialize model with classes for partial_fit
+clf.partial_fit(X_train[:1], y_train[:1], classes=np.array([0, 1]))
+
+# Train over epochs, record training loss and accuracy
+epochs = 200
+train_losses, train_accs = [], []
+
+for _ in range(epochs):
+    clf.partial_fit(X_train, y_train)
+    p_train = clf.predict_proba(X_train)
+    train_losses.append(log_loss(y_train, p_train))
+    train_accs.append(accuracy_score(y_train, clf.predict(X_train)))
+
+# Final evaluation on test set
+y_pred = clf.predict(X_test)
+acc = accuracy_score(y_test, y_pred)
+prec = precision_score(y_test, y_pred, zero_division=0)
+rec = recall_score(y_test, y_pred, zero_division=0)
+f1 = f1_score(y_test, y_pred, zero_division=0)
+cm = confusion_matrix(y_test, y_pred)
+
+print("Metrics")
+print(f"Accuracy : {acc:.4f}")
+print(f"Precision: {prec:.4f}")
+print(f"Recall   : {rec:.4f}")
+print(f"F1 Score : {f1:.4f}")
+
+#Plots: training loss & accuracy over iterations
+plt.figure(figsize=(6,4))
+plt.plot(train_losses)
+plt.title("Training Log Loss vs. Iterations")
+plt.xlabel("Iteration")
+plt.ylabel("Log Loss")
+plt.grid(True)
+plt.show()
+
+plt.figure(figsize=(6,4))
+plt.plot(train_accs)
+plt.title("Training Accuracy vs. Iterations")
+plt.xlabel("Iteration")
+plt.ylabel("Accuracy")
+plt.grid(True)
+plt.show()
+
+# Confusion matrix
+import seaborn as sns
+plt.figure(figsize=(4,4))
+sns.heatmap(cm, annot=True, fmt="d", cbar=False)
+plt.title("Confusion Matrix (Test)")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.show()
